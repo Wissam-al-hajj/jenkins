@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+    environment {
+        // Retrieve the Confluence username and API token stored in Jenkins credentials
+        CONFLUENCE_API_TOKEN = credentials('confluence-api-token')  // API token from Jenkins credentials store
+        CONFLUENCE_API_URL = "https://pixel-software.atlassian.net/wiki/rest/api/content/18841604?expand=body.view"
+    }
+    stages {
+        stage('Fetch Release Version') {
+            steps {
+                script {
+                  	def user = env.CONFLUENCE_API_TOKEN_USER
+                  	def token = env.CONFLUENCE_API_TOKEN_PSW
+                    // Construct the authorization header for Basic Auth with username and token
+                    def auth = "${user}:${token}".bytes.encodeBase64().toString()
+
+                    // Make the API call to Confluence to retrieve the page content
+                    def response = httpRequest(
+                        acceptType: 'APPLICATION_JSON',
+                        url: CONFLUENCE_API_URL,
+                        customHeaders: [[name: 'Authorization', value: "Basic ${auth}"]],
+                        validResponseCodes: '200'
+                    )
+
+                    // Parse the JSON response
+                    def jsonResponse = readJSON text: response
+
+                    // Extract the release version from the HTML content in 'body.view.value'
+                    def htmlContent = jsonResponse.body.view.value
+                    def versionPattern = /<td class="confluenceTd"><p>(\d+\.\d+\.\d+)<\/p><\/td>/
+                    def releaseVersion = (htmlContent =~ versionPattern)[0][1]  // Extract the first match
+
+                    // Set the release version as an environment variable
+                    env.RELEASE_VERSION = releaseVersion
+
+                    // Output the release version to the Jenkins log
+                    echo "Release Version: ${env.RELEASE_VERSION}"
+                }
+            }
+        }
+        stage('Use Release Version') {
+            steps {
+                script {
+                    // Example: Use the release version in the pipeline
+                    echo "The release version we fetched is: ${env.RELEASE_VERSION}"
+                }
+            }
+        }
+    }
+}
